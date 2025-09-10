@@ -44,12 +44,12 @@ func GenerateCode(storedTOTP TOTPStored, timestamp uint64) (uint32, error) {
 	}
 
 	hashedBytes.Write(timeBytes) // Concat the timestamp byte slice
-	h := hashedBytes.Sum(nil)    // Calculate 20-byte SHA-1 digest
+	h := hashedBytes.Sum(nil)    // Calculate 20-byte hash digest
 
-	// AND the SHA-1 with 0x0F (15) to get a single-digit offset
+	// AND the hash with 0x0F (15) to get a single-digit offset
 	offset := h[len(h)-1] & 0x0F
 
-	// Truncate the SHA-1 by the offset and convert it into a 32-bit
+	// Truncate the hash by the offset and convert it into a 32-bit
 	// unsigned int. AND the 32-bit int with 0x7FFFFFFF (2147483647)
 	// to get a 31-bit unsigned int.
 	truncatedHash := binary.BigEndian.Uint32(h[offset:]) & 0x7FFFFFFF

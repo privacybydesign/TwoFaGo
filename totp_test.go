@@ -12,6 +12,21 @@ type testTOTPDataType struct {
 	Expected   int
 }
 
+func TestTOTP(t *testing.T) {
+	testGenerateTOTPCodeList(t)
+}
+
+func testGenerateTOTPCodeList(t *testing.T) {
+	for i, testTOTP := range testTOTPs {
+		typedTimestamp := uint64(testTOTP.Timestamp)
+		typedExpected := uint32(testTOTP.Expected)
+
+		code, err := GenerateCode(testTOTP.TOTPStored, typedTimestamp)
+		require.NoError(t, err, fmt.Sprintf("test case %d failed: %v", i, err))
+		require.Equal(t, typedExpected, code, fmt.Sprintf("test case %d failed: expected %d, got %d", i, typedExpected, code))
+	}
+}
+
 var testTOTPs = []testTOTPDataType{
 	{
 		TOTPStored: TOTPStored{
@@ -89,6 +104,18 @@ var testTOTPs = []testTOTPDataType{
 			Issuer:      "test6",
 			UserAccount: "example@example.com",
 			Secret:      "HVR4CFHAFOWFGGFAGSA5JVTIMMPG6GMT",
+			Period:      15,
+			Algorithm:   "SHA256",
+		},
+		// generated with https://piellardj.github.io/totp-generator/
+		Timestamp: 1757511981,
+		Expected:  317913,
+	},
+	{
+		TOTPStored: TOTPStored{
+			Issuer:      "test7",
+			UserAccount: "example@example.com",
+			Secret:      "HVR4CFHAFOWFGGFAGSA5JVTIMMPG6GMT",
 			Period:      30,
 			Algorithm:   "SHA512",
 		},
@@ -98,7 +125,7 @@ var testTOTPs = []testTOTPDataType{
 	},
 	{
 		TOTPStored: TOTPStored{
-			Issuer:      "test7",
+			Issuer:      "test8",
 			UserAccount: "example@example.com",
 			Secret:      "HVR4CFHAFOWFGGFAGSA5JVTIMMPG6GMT",
 			Period:      60,
@@ -108,20 +135,4 @@ var testTOTPs = []testTOTPDataType{
 		Timestamp: 1757511557,
 		Expected:  634542,
 	},
-}
-
-func TestTOTP(t *testing.T) {
-	testGenerateTOTPCodeList(t)
-}
-
-func testGenerateTOTPCodeList(t *testing.T) {
-
-	for i, testTOTP := range testTOTPs {
-		typedTimestamp := uint64(testTOTP.Timestamp)
-		typedExpected := uint32(testTOTP.Expected)
-
-		code, err := GenerateCode(testTOTP.TOTPStored, typedTimestamp)
-		require.NoError(t, err, fmt.Sprintf("test case %d failed: %v", i, err))
-		require.Equal(t, typedExpected, code, fmt.Sprintf("test case %d failed: expected %d, got %d", i, typedExpected, code))
-	}
 }
