@@ -24,3 +24,8 @@ func New(storagePath string, aesKey [32]byte) (*MFAClient, error) {
 		MFASecretStorage: mfaSecretStorage,
 	}, nil
 }
+
+func (c *MFAClient) Close() error {
+	s := &storage{storagePath: c.storagePath, aesKey: c.aesKey, db: nil}
+	return s.Close()
+}

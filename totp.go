@@ -7,7 +7,9 @@ import (
 	"crypto/sha512"
 	"encoding/base32"
 	"encoding/binary"
+	"fmt"
 	"hash"
+	"time"
 )
 
 type TOTPcode struct {
@@ -21,6 +23,7 @@ type TOTPcode struct {
 
 type TOTP interface {
 	GenerateCode(timestamp uint64) (uint32, error)
+	GetAllCodes(s *BboltMFASecretStorage) ([]TOTPcode, error)
 }
 
 func GenerateCode(storedTOTP TOTPStored, timestamp uint64) (uint32, error) {
@@ -56,4 +59,39 @@ func GenerateCode(storedTOTP TOTPStored, timestamp uint64) (uint32, error) {
 
 	// The TOTP code is the truncated hashedBytes modulo 10^digits
 	return truncatedHash % 1000000, nil
+}
+
+func GetAllCodes(s TOTPSecretStorage) ([]TOTPcode, error) {
+	storedTOTPs, err := s.GetAllTOTPSecrets()
+	if err != nil {
+		return nil, err
+	}
+
+	var codes []TOTPcode
+	for _, storedTOTP := range storedTOTPs {
+		currentTimestamp := uint64(time.Now().Unix())
+		nextTimestamp := currentTimestamp + uint64(storedTOTP.Period)
+
+		currentCode, err := GenerateCode(storedTOTP, currentTimestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		nextCode, err := GenerateCode(storedTOTP, nextTimestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		timerProgress := int(currentTimestamp % uint64(storedTOTP.Period))
+
+		codes = append(codes, TOTPcode{
+			Issuer:        storedTOTP.Issuer,
+			UserAccount:   storedTOTP.UserAccount,
+			Code:          fmt.Sprintf("%06d", currentCode),
+			NextCode:      fmt.Sprintf("%06d", nextCode),
+			Period:        storedTOTP.Period,
+			TimerProgress: timerProgress,
+		})
+	}
+	return codes, nil
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"go.etcd.io/bbolt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -16,14 +17,21 @@ type storage struct {
 }
 
 func (s *storage) Open() error {
-	// makes the directory if it does not exist yet
-	err := os.MkdirAll(s.storagePath, 0700)
-	if err != nil {
-		return err
+	// make the parent directory of the DB file if it does not exist yet
+	dir := filepath.Dir(s.storagePath)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
 	}
 
+	var err error
 	s.db, err = bbolt.Open(s.storagePath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	return err
+}
+
+func (s *storage) Close() error {
+	return s.db.Close()
 }
 
 func decrypt(ciphertext []byte, aesKey [32]byte) ([]byte, error) {
