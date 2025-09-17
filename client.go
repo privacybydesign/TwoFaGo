@@ -1,6 +1,9 @@
 package TwoFaGo
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 type MFAClient struct {
 	storagePath      string
@@ -9,6 +12,8 @@ type MFAClient struct {
 }
 
 func New(storagePath string, aesKey [32]byte) (*MFAClient, error) {
+	storagePath = filepath.Join(storagePath, "twoFaSecrets")
+
 	s := &storage{storagePath: storagePath, aesKey: aesKey}
 	err := s.Open()
 	if err != nil {
@@ -17,6 +22,8 @@ func New(storagePath string, aesKey [32]byte) (*MFAClient, error) {
 
 	// Initialize the MFA secret storage
 	mfaSecretStorage := NewBboltMFASecretStorage(s.db, aesKey)
+
+	fmt.Println("MFA client initialized")
 
 	return &MFAClient{
 		storagePath:      storagePath,

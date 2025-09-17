@@ -16,6 +16,12 @@ type storage struct {
 	aesKey      [32]byte
 }
 
+const databaseFileName = "twofadb"
+
+func (s *storage) Path(pA string) string {
+	return filepath.Join(s.storagePath, pA)
+}
+
 func (s *storage) Open() error {
 	// make the parent directory of the DB file if it does not exist yet
 	dir := filepath.Dir(s.storagePath)
@@ -26,7 +32,7 @@ func (s *storage) Open() error {
 	}
 
 	var err error
-	s.db, err = bbolt.Open(s.storagePath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+	s.db, err = bbolt.Open(s.Path(databaseFileName), 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	return err
 }
 
