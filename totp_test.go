@@ -17,6 +17,8 @@ type testTOTPDataType struct {
 func TestTOTP(t *testing.T) {
 	testGenerateTOTPCodeList(t)
 	testGetAllCodes(t)
+	testDeleteTOTPcodeByCode(t)
+	testDelete30secOldTOTPSecretByCode(t)
 }
 
 func testGenerateTOTPCodeList(t *testing.T) {
@@ -60,10 +62,68 @@ func testGetAllCodes(t *testing.T) {
 
 }
 
+func testDeleteTOTPcodeByCode(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret
+	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
+	require.NoError(t, err)
+
+	// Get all codes
+	codes, err := GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(codes))
+	code := codes[0]
+
+	currentTimestamp := uint64(time.Now().Unix())
+
+	// Delete the code
+	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
+	require.NoError(t, err)
+
+	// Ensure it's deleted
+	codes, err = GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(codes))
+
+	// Try deleting again, should fail
+	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
+	require.Error(t, err)
+}
+
+func testDelete30secOldTOTPSecretByCode(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret with its time set to 31 seconds ago
+	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
+	require.NoError(t, err)
+
+	// Get all codes
+	codes, err := GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(codes))
+	code := codes[0]
+
+	currentTimestamp := uint64(time.Now().Unix()) + 31 // simulate 31 seconds in the future
+
+	// Delete the code
+	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
+	require.NoError(t, err)
+
+	// Ensure it's deleted
+	codes, err = GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(codes))
+}
+
 func SetUpTempTOTPStorage(t *testing.T) (TOTPSecretStorage, string) {
 	var aesKey [32]byte
 	copy(aesKey[:], "asdfasdfasdfasdfasdfasdfasdfasdf")
-	storagePath := fmt.Sprintf("testdata/totp_storage_%d.db", time.Now().UnixNano())
+	storagePath := fmt.Sprintf("testdata/totp_storage_%d", time.Now().UnixNano())
 
 	s := &storage{storagePath: storagePath, aesKey: aesKey}
 	err := s.Open()
@@ -83,7 +143,7 @@ func TearDownTempTOTPStorage(t *testing.T, storage TOTPSecretStorage, storagePat
 			_ = c.Close()
 		}
 	}
-	if err := os.Remove(storagePath); err != nil {
+	if err := os.RemoveAll(storagePath); err != nil {
 		if !os.IsNotExist(err) {
 			t.Logf("failed to remove test db file: %v", err)
 		}

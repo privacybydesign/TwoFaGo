@@ -3,6 +3,7 @@ package TwoFaGo
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 )
 
 type MFAClient struct {
@@ -38,7 +39,6 @@ func (c *MFAClient) Close() error {
 }
 
 func (c *MFAClient) GetAllTOTPSecrets() ([]TOTPcode, error) {
-	fmt.Println("Getting all TOTP codes")
 	codes, err := GetAllCodes(c.MFASecretStorage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all TOTP codes: %w", err)
@@ -53,4 +53,13 @@ func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
 	}
 
 	return nil
+}
+
+func (c *MFAClient) RemoveTOTPSecretByCode(code TOTPcode) {
+	fmt.Println("removing " + code.UserAccount)
+	timestamp := uint64(time.Now().Unix())
+	err := RemoveCodeByTOTPCode(c.MFASecretStorage, code, timestamp)
+	if err != nil {
+		fmt.Printf("failed to remove TOTP secret: %v\n", err)
+	}
 }

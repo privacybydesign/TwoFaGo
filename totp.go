@@ -9,6 +9,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -94,4 +96,32 @@ func GetAllCodes(s TOTPSecretStorage) ([]TOTPcode, error) {
 		})
 	}
 	return codes, nil
+}
+
+func RemoveCodeByTOTPCode(s TOTPSecretStorage, code TOTPcode, currentTimestamp uint64) error {
+	secrets, err := s.GetAllTOTPSecrets()
+	if err != nil {
+		return err
+	}
+
+	// convert code.Code to int, then to uint32; I don't think we can do this in one step cleanly because of error handling which we ignore because we assume the code is always a valid 6-digit number since we generate it ourselves.
+	intCode, _ := strconv.Atoi(code.Code)
+	intCode32 := uint32(intCode)
+
+	for _, secret := range secrets {
+		if strings.EqualFold(secret.UserAccount, code.UserAccount) && strings.EqualFold(secret.Issuer, code.Issuer) {
+			// check if the secret matches by regenerating the code and giving a 1-period leeway for clock drift and processing time
+			currentCode, err := GenerateCode(secret, currentTimestamp)
+			previousCode, err := GenerateCode(secret, currentTimestamp-uint64(secret.Period))
+			nextCode, err := GenerateCode(secret, currentTimestamp+uint64(secret.Period))
+			if err != nil {
+				return err
+			}
+			if intCode32 == currentCode || intCode32 == previousCode || intCode32 == nextCode {
+				return s.DeleteTOTPSecretBySecret(secret.Secret)
+			}
+		}
+	}
+
+	return fmt.Errorf("could not find TOTP secret for %s (%s)", code.UserAccount, code.Issuer)
 }
