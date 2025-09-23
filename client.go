@@ -36,3 +36,21 @@ func (c *MFAClient) Close() error {
 	s := &storage{storagePath: c.storagePath, aesKey: c.aesKey, db: nil}
 	return s.Close()
 }
+
+func (c *MFAClient) GetAllTOTPSecrets() ([]TOTPcode, error) {
+	fmt.Println("Getting all TOTP codes")
+	codes, err := GetAllCodes(c.MFASecretStorage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all TOTP codes: %w", err)
+	}
+	return codes, nil
+}
+
+func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
+	err := c.MFASecretStorage.StoreTOTPSecret(secret)
+	if err != nil {
+		return fmt.Errorf("failed to store TOTP secret: %w", err)
+	}
+
+	return nil
+}

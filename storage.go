@@ -23,12 +23,9 @@ func (s *storage) Path(pA string) string {
 }
 
 func (s *storage) Open() error {
-	// make the parent directory of the DB file if it does not exist yet
-	dir := filepath.Dir(s.storagePath)
-	if dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return err
-		}
+	// Create the entire storage path directory if it doesn't exist
+	if err := os.MkdirAll(s.storagePath, 0700); err != nil {
+		return err
 	}
 
 	var err error
