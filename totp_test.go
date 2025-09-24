@@ -16,9 +16,16 @@ type testTOTPDataType struct {
 
 func TestTOTP(t *testing.T) {
 	testGenerateTOTPCodeList(t)
-	testGetAllCodes(t)
+	testStoreGetCodes(t)
 	testDeleteTOTPcodeByCode(t)
-	testDelete30secOldTOTPSecretByCode(t)
+	testDeleteOffsetTOTPSecretByCode(t, 31, false)
+	testDeleteOffsetTOTPSecretByCode(t, 61, true)
+	testDeleteOffsetTOTPSecretByCode(t, -31, false)
+	testDeleteOffsetTOTPSecretByCode(t, -61, true)
+	testDeleteDuplicateIssuerUser(t)
+	testCaseInsensitivityDuringDelete(t)
+	testInvalidAlgorithm(t)
+	testInvalidPeriod(t)
 }
 
 func testGenerateTOTPCodeList(t *testing.T) {
@@ -32,7 +39,7 @@ func testGenerateTOTPCodeList(t *testing.T) {
 	}
 }
 
-func testGetAllCodes(t *testing.T) {
+func testStoreGetCodes(t *testing.T) {
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
@@ -93,7 +100,7 @@ func testDeleteTOTPcodeByCode(t *testing.T) {
 	require.Error(t, err)
 }
 
-func testDelete30secOldTOTPSecretByCode(t *testing.T) {
+func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireExpired bool) {
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
@@ -108,16 +115,70 @@ func testDelete30secOldTOTPSecretByCode(t *testing.T) {
 	require.Equal(t, 1, len(codes))
 	code := codes[0]
 
-	currentTimestamp := uint64(time.Now().Unix()) + 31 // simulate 31 seconds in the future
+	var currentTimestamp uint64
+
+	if secondsOffset < 0 {
+		currentTimestamp = uint64(time.Now().Unix()) + uint64(secondsOffset)
+	} else {
+		currentTimestamp = uint64(time.Now().Unix()) - uint64(secondsOffset)
+	}
 
 	// Delete the code
 	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
-	require.NoError(t, err)
+	if requireExpired {
+		require.Error(t, err)
+	} else {
+		require.NoError(t, err)
+	}
 
 	// Ensure it's deleted
 	codes, err = GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(codes))
+	if requireExpired {
+		require.Equal(t, 1, len(codes))
+	} else {
+		require.Equal(t, 0, len(codes))
+	}
+}
+
+func testDeleteDuplicateIssuerUser(t *testing.T) {
+	// This test ensures that when there are multiple TOTP secrets with the same Issuer and UserAccount,
+	// deleting one of them by code only deletes the intended one.
+
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store multiple secrets with the same Issuer and UserAccount but different secrets
+	for _, testTOTP := range testTOTPs[8:10] {
+		err := TOTPStorage.StoreTOTPSecret(testTOTP.TOTPStored)
+		require.NoError(t, err)
+	}
+
+	// Get all codes
+	codes, err := GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(codes))
+
+	// Delete the first code
+	codeToDelete := codes[0]
+	currentTimestamp := uint64(time.Now().Unix())
+	err = RemoveCodeByTOTPCode(TOTPStorage, codeToDelete, currentTimestamp)
+	require.NoError(t, err)
+
+	// Ensure only one is deleted
+	codes, err = GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(codes))
+
+	// Ensure the remaining code is the one that was not deleted
+	remainingCode := codes[0]
+	require.Equal(t, testTOTPs[9].TOTPStored.Issuer, remainingCode.Issuer)
+	require.Equal(t, testTOTPs[9].TOTPStored.UserAccount, remainingCode.UserAccount)
+	// we don't get the secret back, but we can regenerate the expected code and compare
+	expectedCode, err := GenerateCode(testTOTPs[9].TOTPStored, currentTimestamp)
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("%06d", expectedCode), remainingCode.Code)
 }
 
 func SetUpTempTOTPStorage(t *testing.T) (TOTPSecretStorage, string) {
@@ -148,6 +209,60 @@ func TearDownTempTOTPStorage(t *testing.T, storage TOTPSecretStorage, storagePat
 			t.Logf("failed to remove test db file: %v", err)
 		}
 	}
+}
+
+func testCaseInsensitivityDuringDelete(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret
+	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
+	require.NoError(t, err)
+	// Get all codes
+	codes, err := GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(codes))
+	code := codes[0]
+
+	currentTimestamp := uint64(time.Now().Unix())
+
+	// Modify the code to have different casing
+	code.Issuer = "TEST0"
+	code.UserAccount = "EXAMPLE@EXAMPLE.COM"
+
+	// Delete the code
+	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
+	require.NoError(t, err)
+
+	// Ensure it's deleted
+	codes, err = GetAllCodes(TOTPStorage)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(codes))
+}
+
+func testInvalidAlgorithm(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret with an invalid algorithm
+	invalidTOTP := testTOTPs[0]
+	invalidTOTP.TOTPStored.Algorithm = "MD5"
+	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
+	require.Error(t, err)
+}
+
+func testInvalidPeriod(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret with an invalid period
+	invalidTOTP := testTOTPs[0]
+	invalidTOTP.TOTPStored.Period = 0
+	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
+	require.Error(t, err)
 }
 
 var testTOTPs = []testTOTPDataType{
@@ -257,5 +372,28 @@ var testTOTPs = []testTOTPDataType{
 		// generated with https://piellardj.github.io/totp-generator/
 		Timestamp: 1757511557,
 		Expected:  634542,
+	}, {
+		TOTPStored: TOTPStored{
+			Issuer:      "test-dupe",
+			UserAccount: "example@example.com",
+			Secret:      "CUCPSO6X2NA6PY23",
+			Period:      30,
+			Algorithm:   "SHA1",
+		},
+		// generated with https://it-tools.tech/otp-generator
+		Timestamp: 1757510707,
+		Expected:  646573,
+	},
+	{
+		TOTPStored: TOTPStored{
+			Issuer:      "test-dupe",
+			UserAccount: "example@example.com",
+			Secret:      "6BJOMFYN3ATB4R64",
+			Period:      30,
+			Algorithm:   "SHA1",
+		},
+		// generated with https://it-tools.tech/otp-generator
+		Timestamp: 1757511094,
+		Expected:  321701,
 	},
 }

@@ -77,6 +77,10 @@ func (s *BboltMFASecretStorage) StoreTOTPSecret(secret TOTPStored) error {
 			return fmt.Errorf("invalid algorithm: %s", secret.Algorithm)
 		}
 
+		if secret.Period <= 0 {
+			return fmt.Errorf("invalid period: %d", secret.Period)
+		}
+
 		encryptedSecret, err := marshalAndEncryptSecret(secret, s.aesKey)
 		if err != nil {
 			return err
