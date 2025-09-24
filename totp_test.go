@@ -17,13 +17,12 @@ type testTOTPDataType struct {
 func TestTOTP(t *testing.T) {
 	testGenerateTOTPCodeList(t)
 	testStoreGetCodes(t)
-	testDeleteTOTPcodeByCode(t)
+	testDeleteTOTPCodeByCode(t)
 	testDeleteOffsetTOTPSecretByCode(t, 31, false)
 	testDeleteOffsetTOTPSecretByCode(t, 61, true)
 	testDeleteOffsetTOTPSecretByCode(t, -31, false)
 	testDeleteOffsetTOTPSecretByCode(t, -61, true)
 	testDeleteDuplicateIssuerUser(t)
-	testCaseInsensitivityDuringDelete(t)
 	testInvalidAlgorithm(t)
 	testInvalidPeriod(t)
 }
@@ -69,7 +68,7 @@ func testStoreGetCodes(t *testing.T) {
 
 }
 
-func testDeleteTOTPcodeByCode(t *testing.T) {
+func testDeleteTOTPCodeByCode(t *testing.T) {
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
@@ -100,6 +99,9 @@ func testDeleteTOTPcodeByCode(t *testing.T) {
 	require.Error(t, err)
 }
 
+// testDeleteOffsetTOTPSecretByCode tests deleting a TOTP secret by code with a time offset to simulate processing delay or deletion at just the wrong time.
+// secondsOffset: positive to simulate future, negative to simulate past
+// requireExpired: if true, we expect the deletion to fail because the code is expired thus can't find a matching account
 func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireExpired bool) {
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
@@ -141,10 +143,10 @@ func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireEx
 	}
 }
 
+// testDeleteDuplicateIssuerUser ensures that when there are multiple TOTP secrets with the same Issuer and UserAccount,
+// deleting one of them by code only deletes the intended one.
+// This is intended as a regression test for a bug where the first matching Issuer/UserAccount was always deleted instead of also checking the generated code (and thus secret).
 func testDeleteDuplicateIssuerUser(t *testing.T) {
-	// This test ensures that when there are multiple TOTP secrets with the same Issuer and UserAccount,
-	// deleting one of them by code only deletes the intended one.
-
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
@@ -181,6 +183,30 @@ func testDeleteDuplicateIssuerUser(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("%06d", expectedCode), remainingCode.Code)
 }
 
+func testInvalidAlgorithm(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret with an invalid algorithm
+	invalidTOTP := testTOTPs[0]
+	invalidTOTP.TOTPStored.Algorithm = "MD5"
+	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
+	require.Error(t, err)
+}
+
+func testInvalidPeriod(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a secret with an invalid period
+	invalidTOTP := testTOTPs[0]
+	invalidTOTP.TOTPStored.Period = 0
+	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
+	require.Error(t, err)
+}
+
 func SetUpTempTOTPStorage(t *testing.T) (TOTPSecretStorage, string) {
 	var aesKey [32]byte
 	copy(aesKey[:], "asdfasdfasdfasdfasdfasdfasdfasdf")
@@ -209,60 +235,6 @@ func TearDownTempTOTPStorage(t *testing.T, storage TOTPSecretStorage, storagePat
 			t.Logf("failed to remove test db file: %v", err)
 		}
 	}
-}
-
-func testCaseInsensitivityDuringDelete(t *testing.T) {
-	// Setup temporary storage
-	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
-	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
-
-	// Store a secret
-	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
-	require.NoError(t, err)
-	// Get all codes
-	codes, err := GetAllCodes(TOTPStorage)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(codes))
-	code := codes[0]
-
-	currentTimestamp := uint64(time.Now().Unix())
-
-	// Modify the code to have different casing
-	code.Issuer = "TEST0"
-	code.UserAccount = "EXAMPLE@EXAMPLE.COM"
-
-	// Delete the code
-	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
-	require.NoError(t, err)
-
-	// Ensure it's deleted
-	codes, err = GetAllCodes(TOTPStorage)
-	require.NoError(t, err)
-	require.Equal(t, 0, len(codes))
-}
-
-func testInvalidAlgorithm(t *testing.T) {
-	// Setup temporary storage
-	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
-	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
-
-	// Store a secret with an invalid algorithm
-	invalidTOTP := testTOTPs[0]
-	invalidTOTP.TOTPStored.Algorithm = "MD5"
-	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
-	require.Error(t, err)
-}
-
-func testInvalidPeriod(t *testing.T) {
-	// Setup temporary storage
-	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
-	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
-
-	// Store a secret with an invalid period
-	invalidTOTP := testTOTPs[0]
-	invalidTOTP.TOTPStored.Period = 0
-	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
-	require.Error(t, err)
 }
 
 var testTOTPs = []testTOTPDataType{

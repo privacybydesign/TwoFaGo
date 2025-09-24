@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"hash"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -109,7 +108,7 @@ func RemoveCodeByTOTPCode(s TOTPSecretStorage, code TOTPcode, currentTimestamp u
 	intCode32 := uint32(intCode)
 
 	for _, secret := range secrets {
-		if strings.EqualFold(secret.UserAccount, code.UserAccount) && strings.EqualFold(secret.Issuer, code.Issuer) {
+		if secret.UserAccount == code.UserAccount && secret.Issuer == code.Issuer {
 			// check if the secret matches by regenerating the code and giving a 1-period leeway for clock drift and processing time
 			currentCode, err := GenerateCode(secret, currentTimestamp)
 			previousCode, err := GenerateCode(secret, currentTimestamp-uint64(secret.Period))
