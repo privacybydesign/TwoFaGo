@@ -55,11 +55,13 @@ func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
 	return nil
 }
 
-func (c *MFAClient) RemoveTOTPSecretByCode(code TOTPcode) {
+func (c *MFAClient) RemoveTOTPSecretByCode(code TOTPcode) error {
 	fmt.Println("removing " + code.UserAccount)
 	timestamp := uint64(time.Now().Unix())
 	err := RemoveCodeByTOTPCode(c.MFASecretStorage, code, timestamp)
 	if err != nil {
-		fmt.Printf("failed to remove TOTP secret: %v\n", err)
+		return fmt.Errorf("failed to remove TOTP secret by code: %w", err)
 	}
+
+	return nil
 }

@@ -85,16 +85,13 @@ func testDeleteTOTPCodeByCode(t *testing.T) {
 
 	currentTimestamp := uint64(time.Now().Unix())
 
-	// Delete the code
 	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
 	require.NoError(t, err)
 
-	// Ensure it's deleted
 	codes, err = GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(codes))
 
-	// Try deleting again, should fail
 	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
 	require.Error(t, err)
 }
@@ -107,11 +104,9 @@ func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireEx
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
 
-	// Store a secret with its time set to 31 seconds ago
 	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
 	require.NoError(t, err)
 
-	// Get all codes
 	codes, err := GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(codes))
@@ -125,7 +120,6 @@ func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireEx
 		currentTimestamp = uint64(time.Now().Unix()) - uint64(secondsOffset)
 	}
 
-	// Delete the code
 	err = RemoveCodeByTOTPCode(TOTPStorage, code, currentTimestamp)
 	if requireExpired {
 		require.Error(t, err)
@@ -133,7 +127,6 @@ func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireEx
 		require.NoError(t, err)
 	}
 
-	// Ensure it's deleted
 	codes, err = GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	if requireExpired {
@@ -151,24 +144,20 @@ func testDeleteDuplicateIssuerUser(t *testing.T) {
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
 
-	// Store multiple secrets with the same Issuer and UserAccount but different secrets
 	for _, testTOTP := range testTOTPs[8:10] {
 		err := TOTPStorage.StoreTOTPSecret(testTOTP.TOTPStored)
 		require.NoError(t, err)
 	}
 
-	// Get all codes
 	codes, err := GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(codes))
 
-	// Delete the first code
 	codeToDelete := codes[0]
 	currentTimestamp := uint64(time.Now().Unix())
 	err = RemoveCodeByTOTPCode(TOTPStorage, codeToDelete, currentTimestamp)
 	require.NoError(t, err)
 
-	// Ensure only one is deleted
 	codes, err = GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(codes))
