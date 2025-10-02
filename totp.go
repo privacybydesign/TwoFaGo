@@ -6,10 +6,14 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"hash"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,6 +29,8 @@ type TOTPcode struct {
 type TOTP interface {
 	GenerateCode(timestamp uint64) (uint32, error)
 	GetAllCodes(s *BboltMFASecretStorage) ([]TOTPcode, error)
+	ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error
+	RemoveCodeByTOTPCode(s TOTPSecretStorage, code TOTPcode, currentTimestamp uint64) error
 }
 
 func GenerateCode(storedTOTP TOTPStored, timestamp uint64) (uint32, error) {
@@ -123,4 +129,140 @@ func RemoveCodeByTOTPCode(s TOTPSecretStorage, code TOTPcode, currentTimestamp u
 	}
 
 	return fmt.Errorf("could not find TOTP secret for %s (%s)", code.UserAccount, code.Issuer)
+}
+
+func ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error {
+	// URL-decode in case the data portion was percent-encoded (e.g. %3D for =)
+	unescapedUrl, err := url.QueryUnescape(inputUrl)
+	if err != nil {
+		return fmt.Errorf("failed to URL-decode migration data: %w", err)
+	}
+
+	var secrets []TOTPStored
+
+	if strings.HasPrefix(unescapedUrl, "otpauth://totp/") {
+		secret, err := otpauthURLToTOTPStored(unescapedUrl)
+		if err != nil {
+			return fmt.Errorf("failed to process otpauth URL: %w", err)
+		}
+		secrets = append(secrets, secret)
+	} else if strings.HasPrefix(unescapedUrl, "otpauth-migration://offline?data=") {
+		googleSecrets, err := googleMigrationToTOTPStored(unescapedUrl)
+		if err != nil {
+			return fmt.Errorf("failed to process Google Authenticator migration URL: %w", err)
+		}
+		secrets = googleSecrets
+	}
+
+	for _, secret := range secrets {
+		err := s.StoreTOTPSecret(secret)
+		if err != nil {
+			return fmt.Errorf("failed to store TOTP secret: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// based this function on this blog post: https://zwyx.dev/blog/google-authenticator-export-format
+func googleMigrationToTOTPStored(rawURL string) ([]TOTPStored, error) {
+	encodedData := strings.TrimPrefix(rawURL, "otpauth-migration://offline?data=")
+	decodedData, err := base64.StdEncoding.DecodeString(encodedData)
+	if err != nil {
+		return []TOTPStored{}, fmt.Errorf("failed to decode base64 data: %w", err)
+	}
+
+	var migrationData MigrationPayload
+	err = proto.Unmarshal(decodedData, &migrationData)
+	if err != nil {
+		return []TOTPStored{}, fmt.Errorf("failed to unmarshal protobuf data: %w", err)
+	}
+
+	if len(migrationData.OtpParameters) == 0 {
+		return []TOTPStored{}, fmt.Errorf("no OTP parameters found in migration data")
+	}
+
+	var stored []TOTPStored
+	for _, param := range migrationData.OtpParameters {
+		if param.Type != MigrationPayload_OTP_TYPE_TOTP {
+			return []TOTPStored{}, fmt.Errorf("unsupported OTP type: %v", param.Type)
+		}
+
+		secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(param.Secret)
+
+		algorithm := "SHA1"
+		switch param.Algorithm {
+		case MigrationPayload_ALGORITHM_SHA1:
+			algorithm = "SHA1"
+		case MigrationPayload_ALGORITHM_SHA256:
+			algorithm = "SHA256"
+		case MigrationPayload_ALGORITHM_SHA512:
+			algorithm = "SHA512"
+		case MigrationPayload_ALGORITHM_MD5:
+			algorithm = "MD5" // Not supported in our implementation but we'll error in the store function; this is just for completeness
+		}
+
+		// we don't support codes other than 6 digits for now
+		if param.Digits != MigrationPayload_DIGIT_COUNT_SIX {
+			return []TOTPStored{}, fmt.Errorf("unsupported number of digits: %v", param.Digits)
+		}
+
+		// add the TOTPStored to the list
+		stored = append(stored, TOTPStored{
+			Issuer:      param.Issuer,
+			UserAccount: param.Name,
+			Secret:      secret,
+			Algorithm:   algorithm,
+			Period:      30, // Google Authenticator uses a fixed period of 30 seconds
+		})
+	}
+	return stored, nil
+
+}
+
+func otpauthURLToTOTPStored(rawURL string) (TOTPStored, error) {
+	parsedUrl, err := url.Parse(rawURL)
+	if err != nil {
+		return TOTPStored{}, fmt.Errorf("failed to parse TOTP URL: %w", err)
+	}
+
+	if parsedUrl.Scheme != "otpauth" || parsedUrl.Host != "totp" {
+		return TOTPStored{}, fmt.Errorf("invalid TOTP URL")
+	}
+
+	secret := parsedUrl.Query().Get("secret")
+	algorithm := parsedUrl.Query().Get("algorithm")
+	period := parsedUrl.Query().Get("period")
+	issuer := parsedUrl.Query().Get("issuer")
+
+	// get the user account from the path, which is in the format /Issuer:UserAccount or /UserAccount
+	userAccount := strings.TrimPrefix(parsedUrl.Path, "/")
+	if strings.Contains(userAccount, ":") {
+		parts := strings.SplitN(userAccount, ":", 2)
+		if issuer == "" {
+			issuer = parts[0]
+		}
+		userAccount = parts[1]
+	}
+
+	periodInt := 30
+	if period != "" {
+		periodInt, err = strconv.Atoi(period)
+		if err != nil || periodInt <= 0 {
+			return TOTPStored{}, fmt.Errorf("invalid period: %s", period)
+		}
+	}
+
+	algorithm = strings.ToUpper(strings.TrimSpace(algorithm))
+	if algorithm == "" {
+		algorithm = "SHA1"
+	}
+
+	return TOTPStored{
+		Issuer:      issuer,
+		UserAccount: userAccount,
+		Secret:      strings.ToUpper(strings.TrimSpace(secret)),
+		Algorithm:   algorithm,
+		Period:      periodInt,
+	}, nil
 }

@@ -12,6 +12,7 @@ type testTOTPDataType struct {
 	TOTPStored TOTPStored
 	Timestamp  int64
 	Expected   int
+	Totpurl    string
 }
 
 func TestTOTP(t *testing.T) {
@@ -25,6 +26,8 @@ func TestTOTP(t *testing.T) {
 	testDeleteDuplicateIssuerUser(t)
 	testInvalidAlgorithm(t)
 	testInvalidPeriod(t)
+	testStoreGoogleMigrationUrl(t)
+	testTOTPUrl(t)
 }
 
 func testGenerateTOTPCodeList(t *testing.T) {
@@ -73,11 +76,9 @@ func testDeleteTOTPCodeByCode(t *testing.T) {
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
 
-	// Store a secret
 	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
 	require.NoError(t, err)
 
-	// Get all codes
 	codes, err := GetAllCodes(TOTPStorage)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(codes))
@@ -185,7 +186,6 @@ func testInvalidAlgorithm(t *testing.T) {
 }
 
 func testInvalidPeriod(t *testing.T) {
-	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
 
@@ -194,6 +194,45 @@ func testInvalidPeriod(t *testing.T) {
 	invalidTOTP.TOTPStored.Period = 0
 	err := TOTPStorage.StoreTOTPSecret(invalidTOTP.TOTPStored)
 	require.Error(t, err)
+}
+
+func testStoreGoogleMigrationUrl(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// Store a Google migration token
+	url := testGoogleMigrationTOTPUris[0]
+	err := ProcessURLTOTPCode(TOTPStorage, url)
+	require.NoError(t, err)
+
+	secrets, err := TOTPStorage.GetAllTOTPSecrets()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(secrets)) // the token contains 2 secrets
+}
+
+func testTOTPUrl(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	// test with the 3 TOTP secrets that have a Totpurl field
+	for _, testTOTP := range testTOTPs[:3] {
+		err := ProcessURLTOTPCode(TOTPStorage, testTOTP.Totpurl)
+		require.NoError(t, err)
+	}
+	secrets, err := TOTPStorage.GetAllTOTPSecrets()
+	require.NoError(t, err)
+	require.Equal(t, 3, len(secrets))
+
+	// check if the data matches
+	for i, secret := range secrets {
+		require.Equal(t, testTOTPs[i].TOTPStored.Issuer, secret.Issuer)
+		require.Equal(t, testTOTPs[i].TOTPStored.UserAccount, secret.UserAccount)
+		require.Equal(t, testTOTPs[i].TOTPStored.Secret, secret.Secret)
+		require.Equal(t, testTOTPs[i].TOTPStored.Period, secret.Period)
+		require.Equal(t, testTOTPs[i].TOTPStored.Algorithm, secret.Algorithm)
+	}
 }
 
 func SetUpTempTOTPStorage(t *testing.T) (TOTPSecretStorage, string) {
@@ -238,6 +277,7 @@ var testTOTPs = []testTOTPDataType{
 		// generated with https://it-tools.tech/otp-generator
 		Timestamp: 1757510707,
 		Expected:  646573,
+		Totpurl:   "otpauth://totp/test0:example@example.com?issuer=test0&secret=CUCPSO6X2NA6PY23&period=30&algorithm=SHA1&digits=6",
 	},
 	{
 		TOTPStored: TOTPStored{
@@ -250,6 +290,7 @@ var testTOTPs = []testTOTPDataType{
 		// generated with https://it-tools.tech/otp-generator
 		Timestamp: 1757511094,
 		Expected:  321701,
+		Totpurl:   "otpauth://totp/test1:example@example.com?issuer=test1&secret=6BJOMFYN3ATB4R64&period=30&algorithm=SHA1&digits=6",
 	}, {
 		TOTPStored: TOTPStored{
 			Issuer:      "test2",
@@ -261,6 +302,7 @@ var testTOTPs = []testTOTPDataType{
 		// generated with https://totp.danhersam.com/
 		Timestamp: 1757510171,
 		Expected:  960766,
+		Totpurl:   "otpauth://totp/test2:example@example.com?issuer=test2&secret=JBSWY3DPEHPK3PXP&period=60&algorithm=SHA1&digits=6",
 	},
 	{
 		TOTPStored: TOTPStored{
@@ -357,4 +399,9 @@ var testTOTPs = []testTOTPDataType{
 		Timestamp: 1757511094,
 		Expected:  321701,
 	},
+}
+
+var testGoogleMigrationTOTPUris = []string{
+	// 2 codes from https://it-tools.tech/otp-generator generated with the app.
+	"otpauth-migration://offline?data=CjwKCr9lJAuNoTFUmiwSCWRlbW8tdXNlchoISVQtVG9vbHMgASgBMAJCE2ViODM0NDE3NTkzODkyNDI0NjgKPAoKaqmhXS0ou7G7PhIJZGVtby11c2VyGghJVC1Ub29scyABKAEwAkITYjcyNTY2MTc1OTM4OTI0OTAxNhACGAEgAA%3D%3D",
 }

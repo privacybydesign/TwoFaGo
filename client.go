@@ -55,6 +55,15 @@ func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
 	return nil
 }
 
+func (c *MFAClient) StoreTOTPSecretByURL(inputUrl string) error {
+	err := ProcessURLTOTPCode(c.MFASecretStorage, inputUrl)
+	if err != nil {
+		return fmt.Errorf("failed to store TOTP secret by URL: %w", err)
+	}
+
+	return nil
+}
+
 func (c *MFAClient) RemoveTOTPSecretByCode(code TOTPcode) error {
 	fmt.Println("removing " + code.UserAccount)
 	timestamp := uint64(time.Now().Unix())
