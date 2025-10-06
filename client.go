@@ -46,6 +46,15 @@ func (c *MFAClient) GetAllTOTPSecrets() ([]TOTPcode, error) {
 	return codes, nil
 }
 
+func (c *MFAClient) ExportSecrets() ([]TOTPStored, error) {
+	secrets, err := c.MFASecretStorage.GetAllTOTPSecrets()
+	if err != nil {
+		return nil, fmt.Errorf("failed to export TOTP secrets: %w", err)
+	}
+
+	return secrets, nil
+}
+
 func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
 	err := c.MFASecretStorage.StoreTOTPSecret(secret)
 	if err != nil {
