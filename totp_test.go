@@ -207,9 +207,14 @@ func testStoreGoogleMigrationUrl(t *testing.T) {
 	err := ProcessURLTOTPCode(TOTPStorage, url)
 	require.NoError(t, err)
 
+	// Store SHA256/512 migration token
+	url = testGoogleMigrationTOTPUris[1]
+	err = ProcessURLTOTPCode(TOTPStorage, url)
+	require.NoError(t, err)
+
 	secrets, err := TOTPStorage.GetAllTOTPSecrets()
 	require.NoError(t, err)
-	require.Equal(t, 2, len(secrets)) // the token contains 2 secrets
+	require.Equal(t, 3, len(secrets)) // the token contains 3 secrets because one is a duplicate
 }
 
 func testExportGoogleMigrationUrl(t *testing.T) {
@@ -435,4 +440,6 @@ var testTOTPs = []testTOTPDataType{
 var testGoogleMigrationTOTPUris = []string{
 	// 2 codes from https://it-tools.tech/otp-generator generated with the app.
 	"otpauth-migration://offline?data=CjwKCr9lJAuNoTFUmiwSCWRlbW8tdXNlchoISVQtVG9vbHMgASgBMAJCE2ViODM0NDE3NTkzODkyNDI0NjgKPAoKaqmhXS0ou7G7PhIJZGVtby11c2VyGghJVC1Ub29scyABKAEwAkITYjcyNTY2MTc1OTM4OTI0OTAxNhACGAEgAA%3D%3D",
+	// 2 codes from https://piellardj.github.io/totp-generator with sha256 and sha512 generated with the app.
+	"otpauth-migration://offline?data=Ck8KFD1jwRTgK6xTGKA0gdTWaGMebxmTEg1UT1RQZ2VuZXJhdG9yGg1UT1RQZ2VuZXJhdG9yIAMoATACQhMwZGI1OTgxNzU5OTIyOTAyNDE3Ck8KFD1jwRTgK6xTGKA0gdTWaGMebxmTEg1UT1RQZ2VuZXJhdG9yGg1UT1RQZ2VuZXJhdG9yIAIoATACQhM5ODBmNWUxNzU5OTIyOTA3NzQ2EAIYASAA",
 }
