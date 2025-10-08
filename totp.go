@@ -165,12 +165,7 @@ func ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error {
 	return nil
 }
 
-func ExportSecretsAsURL(s TOTPSecretStorage, isGoogle bool) ([]string, error) {
-	secrets, err := s.GetAllTOTPSecrets()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all TOTP secrets: %w", err)
-	}
-
+func ExportSecretsAsURL(secrets []TOTPStored, isGoogle bool) ([]string, error) {
 	var urls []string
 	if isGoogle {
 		googleURL, err := totpStoredToGoogleMigration(secrets)

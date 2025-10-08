@@ -55,8 +55,17 @@ func (c *MFAClient) ExportSecrets() ([]TOTPStored, error) {
 	return secrets, nil
 }
 
-func (c *MFAClient) ExportSecretsToGoogleAuth(isGoogle bool) ([]string, error) {
-	return ExportSecretsAsURL(c.MFASecretStorage, isGoogle)
+func (c *MFAClient) ExportSecretsToUrl(secrets []TOTPStored, isGoogle bool) ([]string, error) {
+	if secrets == nil {
+		return nil, fmt.Errorf("no secrets provided to export")
+	}
+
+	urls, err := ExportSecretsAsURL(secrets, isGoogle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export TOTP secrets to URL: %w", err)
+	}
+
+	return urls, nil
 }
 
 func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
