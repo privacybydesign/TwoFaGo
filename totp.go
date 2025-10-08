@@ -30,6 +30,7 @@ type TOTP interface {
 	GenerateCode(timestamp uint64) (uint32, error)
 	GetAllCodes(s *BboltMFASecretStorage) ([]TOTPcode, error)
 	ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error
+	ExportSecretsAsURL(s TOTPSecretStorage, isGoogle bool) ([]string, error)
 	RemoveCodeByTOTPCode(s TOTPSecretStorage, code TOTPcode, currentTimestamp uint64) error
 }
 
@@ -162,6 +163,68 @@ func ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error {
 	}
 
 	return nil
+}
+
+func ExportSecretsAsURL(s TOTPSecretStorage, isGoogle bool) ([]string, error) {
+	secrets, err := s.GetAllTOTPSecrets()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all TOTP secrets: %w", err)
+	}
+
+	var urls []string
+	if isGoogle {
+		googleURL, err := totpStoredToGoogleMigration(secrets)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert TOTP secrets to Google Auth migration URL: %w", err)
+		}
+
+		urls = append(urls, googleURL)
+	} else {
+		return []string{}, fmt.Errorf("only Google Auth migration URL export is supported at this time")
+	}
+
+	return urls, nil
+}
+
+func totpStoredToGoogleMigration(secrets []TOTPStored) (string, error) {
+	var migrationData MigrationPayload
+
+	for _, secret := range secrets {
+		var algorithm MigrationPayload_Algorithm
+		switch strings.ToUpper(secret.Algorithm) {
+		case "SHA1":
+			algorithm = MigrationPayload_ALGORITHM_SHA1
+		case "SHA256":
+			algorithm = MigrationPayload_ALGORITHM_SHA256
+		case "SHA512":
+			algorithm = MigrationPayload_ALGORITHM_SHA512
+		case "MD5":
+			algorithm = MigrationPayload_ALGORITHM_MD5 // Not supported in our implementation but we'll error in the store function; this is just for completeness
+		default:
+			return "", fmt.Errorf("unsupported algorithm: %s", secret.Algorithm)
+		}
+
+		migrationData.OtpParameters = append(migrationData.OtpParameters, &MigrationPayload_OtpParameters{
+			Issuer:    secret.Issuer,
+			Name:      secret.UserAccount,
+			Secret:    []byte(secret.Secret),
+			Type:      MigrationPayload_OTP_TYPE_TOTP,
+			Algorithm: algorithm,
+			Digits:    MigrationPayload_DIGIT_COUNT_SIX, // We only support 6 digits in our implementation
+		})
+	}
+
+	// Set the version to 2 as per the protobuf definition or the Google Authenticator app will error with "update in play store" on newer versions of the app
+	migrationData.Version = 2
+
+	encodedData, err := proto.Marshal(&migrationData)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal protobuf data: %w", err)
+	}
+
+	base64Data := base64.StdEncoding.EncodeToString(encodedData)
+
+	return "otpauth-migration://offline?data=" + base64Data, nil
 }
 
 // based this function on this blog post: https://zwyx.dev/blog/google-authenticator-export-format

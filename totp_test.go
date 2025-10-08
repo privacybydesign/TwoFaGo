@@ -27,6 +27,7 @@ func TestTOTP(t *testing.T) {
 	testInvalidAlgorithm(t)
 	testInvalidPeriod(t)
 	testStoreGoogleMigrationUrl(t)
+	testExportGoogleMigrationUrl(t)
 	testTOTPUrl(t)
 }
 
@@ -209,6 +210,36 @@ func testStoreGoogleMigrationUrl(t *testing.T) {
 	secrets, err := TOTPStorage.GetAllTOTPSecrets()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(secrets)) // the token contains 2 secrets
+}
+
+func testExportGoogleMigrationUrl(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+
+	// Store multiple secrets, we only need 3 for this test and because the test data contains some duplicates
+	for _, testTOTP := range testTOTPs[:3] {
+		err := TOTPStorage.StoreTOTPSecret(testTOTP.TOTPStored)
+		require.NoError(t, err)
+	}
+
+	urls, err := ExportSecretsAsURL(TOTPStorage, true)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(urls)) // all 3 secrets should be in a single migration URL
+
+	// Basic validation of the URL
+	require.Contains(t, urls[0], "otpauth-migration://offline?data=")
+
+	// set up a new storage and import the URL to verify round-trip
+	TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+	newStorage, newStoragePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, newStorage, newStoragePath)
+
+	err = ProcessURLTOTPCode(newStorage, urls[0])
+	require.NoError(t, err)
+
+	secrets, err := newStorage.GetAllTOTPSecrets()
+	require.NoError(t, err)
+	require.Equal(t, 3, len(secrets))
 }
 
 func testTOTPUrl(t *testing.T) {

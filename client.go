@@ -55,6 +55,10 @@ func (c *MFAClient) ExportSecrets() ([]TOTPStored, error) {
 	return secrets, nil
 }
 
+func (c *MFAClient) ExportSecretsToGoogleAuth(isGoogle bool) ([]string, error) {
+	return ExportSecretsAsURL(c.MFASecretStorage, isGoogle)
+}
+
 func (c *MFAClient) StoreTOTPSecret(secret TOTPStored) error {
 	err := c.MFASecretStorage.StoreTOTPSecret(secret)
 	if err != nil {
