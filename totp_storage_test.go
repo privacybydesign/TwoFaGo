@@ -55,7 +55,6 @@ func RunTestWithTempBboltMfaStorage(t *testing.T, name string, test func(t *test
 }
 
 func testStoreRetrieveTOTPSecret(t *testing.T, storage TOTPSecretStorage) {
-
 	err := storage.StoreTOTPSecret(secretSample)
 	require.NoError(t, err)
 
