@@ -103,7 +103,7 @@ func (c *MFAClient) ExportSecretsToUrl(secrets []TOTPStored, isGoogle bool) ([]s
 	return urls, nil
 }
 
-func (c *MFAClient) EncryptExportFile(password, fileContent string) (string, error) {
+func (c *MFAClient) EncryptExportFile(fileContent, password string) (string, error) {
 	Content, err := c.export.EncryptExportFile(password, fileContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt export file: %w", err)
@@ -112,7 +112,7 @@ func (c *MFAClient) EncryptExportFile(password, fileContent string) (string, err
 	return Content, nil
 }
 
-func (c *MFAClient) DecryptExportFile(password, encryptedContent string) (string, error) {
+func (c *MFAClient) DecryptExportFile(encryptedContent, password string) (string, error) {
 	Content, err := c.export.DecryptExportFile(password, encryptedContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt export file: %w", err)
