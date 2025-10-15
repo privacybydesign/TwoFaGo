@@ -83,25 +83,19 @@ func testTOTPUrl(t *testing.T, export *exportImpl) {
 }
 
 func testEncryptDecryptHappy(t *testing.T, export *exportImpl) {
-	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
-	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+	for _, file := range rawTestFile {
+		fileContent, err := export.EncryptExportFile("test", file)
+		if err != nil {
+			return
+		}
 
-	for _, testTOTP := range testTOTPs {
-		err := TOTPStorage.StoreTOTPSecret(testTOTP.TOTPStored)
+		require.NotEmpty(t, fileContent)
+
+		// decrypt the file content to verify it was encrypted correctly
+		decryptedContent, err := export.DecryptExportFile("test", fileContent)
 		require.NoError(t, err)
+		require.Equal(t, file, decryptedContent)
 	}
-
-	fileContent, err := export.EncryptExportFile("testpassword", "testfilecontent")
-	if err != nil {
-		return
-	}
-
-	require.NotEmpty(t, fileContent)
-
-	// decrypt the file content to verify it was encrypted correctly
-	decryptedContent, err := export.DecryptExportFile("testpassword", fileContent)
-	require.NoError(t, err)
-	require.Equal(t, "testfilecontent", decryptedContent)
 }
 
 func testEncryptDecryptWrongPassword(t *testing.T, export *exportImpl) {
@@ -170,6 +164,10 @@ func testEncryptEmptyString(t *testing.T, export *exportImpl) {
 	}
 
 	require.Error(t, err)
+}
+
+var rawTestFile = []string{
+	"Issuer: OpenAI\\nAccount: test.nl\\nSecret: WL5RMI2PVYKEIQQNRB\\nPeriod: 30\\nAlgorithm: SHA1\\n\\nIssuer: Cloudflare\\nAccount: test.nl\\nSecret: WL5RMI2PVYKEIQQNR\\nPeriod: 30\\nAlgorithm: SHA1\\n\\nIssuer: Discord\\nAccount: test.nl\\nSecret: WL5RMI2PVYKEIQQNRD\\nPeriod: 30\\nAlgorithm: SHA1\\n\\n",
 }
 
 var testGoogleMigrationTOTPUris = []string{
