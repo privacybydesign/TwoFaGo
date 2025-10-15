@@ -111,3 +111,12 @@ func (c *MFAClient) EncryptExportFile(password, fileContent string) (string, err
 
 	return encryptedContent, nil
 }
+
+func (c *MFAClient) DecryptExportFile(password, encryptedContent string) (string, error) {
+	decryptedContent, err := c.export.DecryptExportFile(password, encryptedContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt export file: %w", err)
+	}
+
+	return decryptedContent, nil
+}

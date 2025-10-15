@@ -18,6 +18,7 @@ type Export interface {
 	ProcessURLTOTPCode(s TOTPSecretStorage, inputUrl string) error
 	ExportSecretsAsURL(secrets []TOTPStored, isGoogle bool) ([]string, error)
 	EncryptExportFile(password, fileContent string) (string, error)
+	DecryptExportFile(password, envelope string) (string, error)
 }
 
 type exportImpl struct{}
@@ -119,7 +120,7 @@ func (e *exportImpl) EncryptExportFile(password, fileContent string) (string, er
 }
 
 // DecryptExportFile reverses EncryptExportFile given the same password.
-func decryptExportFile(password, envelope string) (string, error) {
+func (e *exportImpl) DecryptExportFile(password, envelope string) (string, error) {
 	// Split on '$' and ignore empty segments that can occur from leading '$'
 	parts := make([]string, 0)
 	for _, p := range strings.Split(envelope, "$") {
@@ -208,7 +209,7 @@ func totpStoredToGoogleMigration(secrets []TOTPStored) (string, error) {
 		case "SHA512":
 			algorithm = MigrationPayload_ALGORITHM_SHA512
 		case "MD5":
-			algorithm = MigrationPayload_ALGORITHM_MD5 // Not supported in our implementation but we'll error in the store function; this is just for completeness
+			algorithm = MigrationPayload_ALGORITHM_MD5 // Not supported in our implementation, but we'll error in the store function; this is just for completeness
 		default:
 			return "", fmt.Errorf("unsupported algorithm: %s", secret.Algorithm)
 		}
@@ -271,7 +272,7 @@ func googleMigrationToTOTPStored(rawURL string) ([]TOTPStored, error) {
 		case MigrationPayload_ALGORITHM_SHA512:
 			algorithm = "SHA512"
 		case MigrationPayload_ALGORITHM_MD5:
-			algorithm = "MD5" // Not supported in our implementation but we'll error in the store function; this is just for completeness
+			algorithm = "MD5" // Not supported in our implementation, but we'll error in the store function; this is just for completeness
 		}
 
 		// we don't support codes other than 6 digits for now

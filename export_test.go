@@ -13,7 +13,7 @@ func TestExport(t *testing.T) {
 	testEncryptDecryptHappy(t, &exportImpl{})
 	testEncryptDecryptWrongPassword(t, &exportImpl{})
 	testEncryptDecryptNoPassword(t, &exportImpl{})
-	testEncryptDecryptEmptyString(t, &exportImpl{})
+	testEncryptEmptyString(t, &exportImpl{})
 }
 
 func testStoreGoogleMigrationUrl(t *testing.T, export *exportImpl) {
@@ -99,7 +99,7 @@ func testEncryptDecryptHappy(t *testing.T, export *exportImpl) {
 	require.NotEmpty(t, fileContent)
 
 	// decrypt the file content to verify it was encrypted correctly
-	decryptedContent, err := decryptExportFile("testpassword", fileContent)
+	decryptedContent, err := export.DecryptExportFile("testpassword", fileContent)
 	require.NoError(t, err)
 	require.Equal(t, "testfilecontent", decryptedContent)
 }
@@ -124,7 +124,7 @@ func testEncryptDecryptWrongPassword(t *testing.T, export *exportImpl) {
 	require.NotEmpty(t, fileContent)
 
 	// try decrypting with wrong password
-	_, err = decryptExportFile("wrongpassword", fileContent)
+	_, err = export.DecryptExportFile("wrongpassword", fileContent)
 	require.Error(t, err)
 }
 
@@ -148,11 +148,11 @@ func testEncryptDecryptNoPassword(t *testing.T, export *exportImpl) {
 	require.NotEmpty(t, fileContent)
 
 	// try decrypting with wrong password
-	_, err = decryptExportFile("", fileContent)
+	_, err = export.DecryptExportFile("", fileContent)
 	require.Error(t, err)
 }
 
-func testEncryptDecryptEmptyString(t *testing.T, export *exportImpl) {
+func testEncryptEmptyString(t *testing.T, export *exportImpl) {
 	// Setup temporary storage
 	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
 	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
