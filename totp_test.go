@@ -23,7 +23,8 @@ func TestTOTP(t *testing.T) {
 	testDeleteOffsetTOTPSecretByCode(t, 61, true)
 	testDeleteOffsetTOTPSecretByCode(t, -31, false)
 	testDeleteOffsetTOTPSecretByCode(t, -61, true)
-	RunTestWithTempBboltMfaStorage(t, "testDeleteDuplicateIssuerUser", testDeleteDuplicateIssuerUser)
+	testDeleteLastTOTPSecretByCode(t),
+		RunTestWithTempBboltMfaStorage(t, "testDeleteDuplicateIssuerUser", testDeleteDuplicateIssuerUser)
 	RunTestWithTempBboltMfaStorage(t, "testInvalidAlgorithm", testInvalidAlgorithm)
 	RunTestWithTempBboltMfaStorage(t, "testInvalidPeriod", testInvalidPeriod)
 }
@@ -131,6 +132,31 @@ func testDeleteOffsetTOTPSecretByCode(t *testing.T, secondsOffset int, requireEx
 	} else {
 		require.Equal(t, 0, len(codes))
 	}
+}
+
+func testDeleteLastTOTPSecretByCode(t *testing.T) {
+	// Setup temporary storage
+	TOTPStorage, storagePath := SetUpTempTOTPStorage(t)
+	defer TearDownTempTOTPStorage(t, TOTPStorage, storagePath)
+
+	totp := &TOTPImpl{s: TOTPStorage}
+
+	err := TOTPStorage.StoreTOTPSecret(testTOTPs[0].TOTPStored)
+	require.NoError(t, err)
+
+	codes, err := totp.GetAllCodes()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(codes))
+	code := codes[0]
+
+	var currentTimestamp uint64
+
+	err = totp.RemoveCodeByTOTPCode(code, currentTimestamp)
+	require.NoError(t, err)
+
+	codes, err = totp.GetAllCodes()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(codes))
 }
 
 // testDeleteDuplicateIssuerUser ensures that when there are multiple TOTP secrets with the same Issuer and UserAccount,
