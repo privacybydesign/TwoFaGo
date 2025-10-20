@@ -14,29 +14,43 @@ type MFAClient struct {
 	totp             TOTP
 }
 
-func New(storagePath string, aesKey [32]byte) (*MFAClient, error) {
+func New(storagePath string, aesKey [32]byte) *MFAClient {
 	storagePath = filepath.Join(storagePath, "twoFaSecrets")
-
-	s := &storage{storagePath: storagePath, aesKey: aesKey}
-	err := s.Open()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open 2fa storage: %w", err)
-	}
-
-	// Initialize the MFA secret storage
-	mfaSecretStorage := NewBboltMFASecretStorage(s.db, aesKey)
 
 	fmt.Println("MFA client initialized")
 
 	client := &MFAClient{
 		storagePath:      storagePath,
 		aesKey:           aesKey,
-		MFASecretStorage: mfaSecretStorage,
+		MFASecretStorage: nil, // will be initialized in OpenStorage
 		export:           &exportImpl{},
-		totp:             &TOTPImpl{s: mfaSecretStorage},
+		totp:             &TOTPImpl{s: nil},
 	}
 
-	return client, nil
+	return client
+}
+
+// OpenStorage initializes and opens the storage for MFA secrets.
+// We did this so we can always start the client without risk of errors but only open the storage when experimental features are enabled.
+// so we don't need to restart the whole app when they're toggled and so integration tests run properly.
+func (c *MFAClient) OpenStorage() error {
+	// check if storage is already opened to avoid reopening
+	if c.MFASecretStorage != nil {
+		return nil
+	}
+
+	s := &storage{storagePath: c.storagePath, aesKey: c.aesKey}
+	err := s.Open()
+	if err != nil {
+		return fmt.Errorf("failed to open 2fa storage: %w", err)
+	}
+
+	// Initialize the MFA secret storage
+	mfaSecretStorage := NewBboltMFASecretStorage(s.db, c.aesKey)
+
+	c.MFASecretStorage = mfaSecretStorage
+
+	return nil
 }
 
 func (c *MFAClient) Close() error {
