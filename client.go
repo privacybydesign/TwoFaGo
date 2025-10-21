@@ -36,7 +36,7 @@ func New(storagePath string, aesKey [32]byte) *MFAClient {
 func (c *MFAClient) OpenStorage() (*MFAClient, error) {
 	// check if storage is already opened to avoid reopening
 	if c.MFASecretStorage != nil {
-		return &MFAClient{}, nil
+		return c, nil
 	}
 
 	s := &storage{storagePath: c.storagePath, aesKey: c.aesKey}
