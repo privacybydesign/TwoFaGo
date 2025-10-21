@@ -36,6 +36,8 @@ type TOTPSecretStorage interface {
 	GetAllTOTPSecrets() ([]TOTPStored, error)
 
 	DeleteTOTPSecretBySecret(secretStr string) error
+
+	ClearStorage() error
 }
 
 func (s *BboltMFASecretStorage) StoreTOTPSecret(secret TOTPStored) error {
@@ -144,6 +146,17 @@ func (s *BboltMFASecretStorage) DeleteTOTPSecretBySecret(secretStr string) error
 			return b.Delete(keyToDelete)
 		}
 		return nil
+	})
+}
+
+func (s *BboltMFASecretStorage) ClearStorage() error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		err := tx.DeleteBucket([]byte(mfaSecretBucketName))
+		if err != nil && err != bbolt.ErrBucketNotFound {
+			return err
+		}
+		_, err = tx.CreateBucket([]byte(mfaSecretBucketName))
+		return err
 	})
 }
 
